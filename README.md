@@ -100,8 +100,10 @@ categorized into three groups:
   nodes, forming a connected group where each consecutive pair is within
   a short distance of each other (right figure; after processing steps green nodes are defined as simple and yellow nodes defined to be grouped simple nodes).
 
-![A roundabout's segments simplified to a set of node points](images/roundabout-node-points.png)
-![Two nearby simple nodes merged into one logical node, versus other, more distant simple nodes](images/simple-and-grouped-nodes.png)
+<p align="center">
+  <img src="images/roundabout-node-points.png" alt="A roundabout's segments simplified to a set of node points" width="45%">
+  <img src="images/simple-and-grouped-nodes.png" alt="Two nearby simple nodes merged into one logical node" width="45%">
+</p>
 
 The eventual goal of this classification is to assign point-based
 records — such as recorded incidents — onto the intersections.
