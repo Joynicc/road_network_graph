@@ -17,6 +17,9 @@ deriving relevant indicators for further analysis.
 The input is **BDTRE**, the Piedmont Region's geo-topographic database.
 It contains one record per road segment, each with a Linestring geometry
 and a set of descriptive attributes, and a unique identifier per record.
+A roundabout in the source geopackage next to the corresponding satellite image is shown below.
+
+![A roundabout in the source map data next to the corresponding satellite image](images/roundabout-source-vs-satellite.png)
 
 The goal is to turn these raw segments into **arcs** — individual roads,
 or combinations of roads, that connect intersections at one or both
@@ -34,8 +37,7 @@ To build the arcs:
   intersections.
 - A small buffer is created around each intersection. Roads that
   intersect this buffer are trimmed, and the updated geometry is saved,
-  with the remaining attributes aggregated according to the rules in
-  `build_arcs.py`.
+  with the remaining attributes aggregated according to the rules defined by third part.
 
 ![An example of raw segments (dashed) merged into a single arc between two intersections (green)](images/arc-merge-example.png)
 
@@ -44,24 +46,18 @@ To build the arcs:
 A `has_public_transport` flag is added to the arcs to indicate whether an
 arc carries a public transportation line. This information comes from a
 public-transport route dataset (for example, derived from a GTFS feed).
-
 The challenge is that the road network and the public-transport network
 don't perfectly overlap. In the figure below, the transit route and the
 road network follow the same street but don't share geometry:
 
-![Misalignment between the public-transport route and the road network](images/tpl-road-misalignment.png)
+![A transit route buffer near a roundabout](images/tpl-near-roundabout.png)
 
 This misalignment means a buffer has to be drawn around the transit
 route to catch the corresponding road — but a wide enough buffer also
 catches side roads and alleys that don't actually carry the line,
-leading to incorrect assignments:
+leading to incorrect assignments (blue polygon is the buffer around the main road):
 
-![A transit buffer also catching nearby side roads](images/tpl-buffer-side-roads.png)
-
-The same issue shows up around more complex junctions, such as a
-roundabout with several approach roads close together:
-
-![A transit route buffer near a roundabout](images/tpl-near-roundabout.png)
+![Misalignment between the public-transport route and the road network](images/tpl-road-misalignment.png)
 
 To address this:
 
@@ -69,11 +65,13 @@ To address this:
   a buffer is created around the transit lines to capture the arcs that
   intersect or lie close to them. A spatial index is used so the check
   only involves nearby arcs.
-- To filter out the side arcs, the connectivity of their endpoints is
+- To filter out the side arcs (yellow segments in the figure below), the connectivity of their endpoints is
   checked. Side roads typically have only one end connected to the rest
   of the network, while the road actually carrying the line is connected
   at both ends. Arcs with both endpoints connected are flagged as
   carrying public transport.
+
+  ![A transit buffer also catching nearby side roads](images/tpl-buffer-side-roads.png)
 
 ## Altitude
 
@@ -85,10 +83,9 @@ from a digital elevation raster and averaged.
 
 ## Tortuosity
 
-Tortuosity is the ratio of an arc's length to the straight-line
-(Euclidean) distance between its start and end points. It is computed
-from the arc's first and last points and its real length, giving a
-measure of how much the arc deviates from a straight path.
+Tortuosity is the ratio of an arc's length to the Euclidean distance between its start and end points. It is computed from the arc's first and last points and its real length, giving a measure of how much the arc deviates from a straight path.
+
+![tortuosity](images/tortuosity.png)
 
 ## Intersection nodes
 
@@ -96,34 +93,29 @@ Nodes — the intersections where three or more arcs converge — are
 categorized into three groups:
 
 - **Roundabout nodes** — nodes representing a roundabout made up of road
-  segments tagged as roundabout geometry.
+  segments tagged as roundabout geometry (left figure).
 - **Simple nodes** — nodes formed by more than two road segments that
   are not part of a roundabout.
 - **Grouped simple nodes** — simple nodes linked through intermediate
   nodes, forming a connected group where each consecutive pair is within
-  a short distance of each other.
+  a short distance of each other (right figure; after processing steps green nodes are defined as simple and yellow nodes defined to be grouped simple nodes).
+
+![A roundabout's segments simplified to a set of node points](images/roundabout-node-points.png)
+![Two nearby simple nodes merged into one logical node, versus other, more distant simple nodes](images/simple-and-grouped-nodes.png)
 
 The eventual goal of this classification is to assign point-based
 records — such as recorded incidents — onto the intersections.
 
 ### Roundabout nodes
 
-In the source data, roundabout labels are sometimes missing, which
-complicates the categorization. To group roundabout segments and assign
-a unique ID to each roundabout:
+In the source data, roundabout labels are not perfectly labeled (missing or wrong assignments), which
+complicates the categorization. To group roundabout segments and assign a unique ID to each roundabout:
 
-- A spatial index is used to efficiently find neighboring segments,
-  which are represented as a graph where each segment is a node and
-  connections are based on geometric proximity (touching or
-  intersecting).
-- Connected components in this graph represent groups of segments that
-  together form a complete roundabout, or part of one.
-- A buffer is created around each group and merged into a single
-  polygon per roundabout. This also helps recover segments that belong
-  to the roundabout but weren't tagged as such.
+- A spatial indexing method is then used to efficiently identify neighboring road segments. These segments are then represented in a graph, where each road segment corresponds to a node. Connections between road segments are established based on their geometric proximity, if they touch or intersect.
+- Once the graph is constructed, connected components are identified, representing groups of road segments that together form a complete roundabout or part of it.
+- A buffer is created around each group of road segments, and the unary_union function is used to merge intersecting buffers into unique polygons. This process helps include some missing roads that are part of the roundabout but were not correctly indicated as such.
 
-![A roundabout in the source map data next to the corresponding satellite image](images/roundabout-source-vs-satellite.png)
-![A roundabout's segments simplified to a set of node points](images/roundabout-node-points.png)
+![roundabout node construction](images/roundabout_construction.png)
 
 ### Simple and grouped simple nodes
 
@@ -132,10 +124,7 @@ road segments: each node is associated with the intersecting arcs and
 their endpoints, and a distance-based proximity check determines whether
 the node is isolated or connected to neighboring nodes.
 
-Isolated nodes are classified as simple nodes, while nodes found close
-to one another are grouped into a single logical node.
-
-![Two nearby simple nodes merged into one logical node, versus other, more distant simple nodes](images/simple-and-grouped-nodes.png)
+Isolated nodes are classified as simple nodes, while spatially connected nodes are further analyzed using connected-component analysis to identify groups of nodes that form a single logical network node. The resulting grouped nodes are assigned unique identifiers, with their associated road segments consolidated accordingly.
 
 ## Repository structure
 
