@@ -85,7 +85,9 @@ from a digital elevation raster and averaged.
 
 Tortuosity is the ratio of an arc's length to the Euclidean distance between its start and end points. It is computed from the arc's first and last points and its real length, giving a measure of how much the arc deviates from a straight path.
 
-![tortuosity](images/tortuosity.png)
+<p align="center">
+  <img src="images/tortuosity.png" alt="Tortuosity" width="500">
+</p>
 
 ## Intersection nodes
 
