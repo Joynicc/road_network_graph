@@ -44,7 +44,14 @@ import utils
 def load_segments(path) -> gpd.GeoDataFrame:
     """Load the raw segment layer and rename columns to the generalized schema."""
     gdf = gpd.read_file(path)
-    gdf = gdf.rename(columns=config.RAW_SEGMENT_COLUMN_MAP)
+
+    # ANNUAL_METRIC_TEMPLATES maps generalized name -> raw name, per year
+    annual_metric_map = {
+        raw.format(year=year): name.format(year=year)
+        for name, raw in config.ANNUAL_METRIC_TEMPLATES.items()
+        for year in config.YEARS
+    }
+    gdf = gdf.rename(columns={**config.RAW_SEGMENT_COLUMN_MAP, **annual_metric_map})
     gdf = gdf.to_crs(config.CRS_METRIC)
 
     if config.CURRENT_EDITION_FLAG_COLUMN and config.CURRENT_EDITION_FLAG_COLUMN in gdf.columns:
@@ -219,13 +226,14 @@ def add_public_transport_flag(arcs: gpd.GeoDataFrame, routes: gpd.GeoDataFrame) 
 
 def sample_altitude(point: Point, raster) -> float:
     try:
-        value = next(raster.sample([(point.x, point.y)]))[0]
-    except (ValueError, StopIteration):
+        # masked=True masks the raster's nodata value and points outside it
+        value = next(raster.sample([(point.x, point.y)], masked=True))[0]
+    except (ValueError, StopIteration, IndexError):
         return None
 
-    if value is None or np.isinf(value) or np.isnan(value):
+    if np.ma.is_masked(value) or not np.isfinite(value):
         return None
-    return value
+    return float(value)
 
 
 def get_arc_endpoints(geometry):
@@ -248,7 +256,9 @@ def add_average_altitude(arcs: gpd.GeoDataFrame, raster_path) -> gpd.GeoDataFram
     averages = []
 
     with rasterio.open(raster_path) as raster:
-        for geometry in arcs.geometry:
+        # sample in the raster's own CRS, which may differ from CRS_METRIC
+        geometries = arcs.geometry.to_crs(raster.crs) if raster.crs else arcs.geometry
+        for geometry in geometries:
             endpoints = get_arc_endpoints(geometry)
             if endpoints is None:
                 averages.append(None)
